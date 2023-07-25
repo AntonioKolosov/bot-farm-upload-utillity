@@ -6,6 +6,8 @@ python main.py -botname=name1"
 
 import os
 from pathlib import Path
+
+from src.uploader.dynamo_uploader import DynamoDB
 from src.uploader.s3_uploader import S3uploader
 # from src.uploader.dynamo_uploader import DynamoDB
 import argparse
@@ -26,7 +28,7 @@ def main():
     dscr = Descriptor(bot_name)
 
     if the_type is None:
-        # DynamoDB(dscr).get_bot_metadata(bot_name)
+        DynamoDB(dscr).get_bot_metadata(bot_name)
         S3uploader(dscr).upload()
   
 
