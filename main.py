@@ -5,14 +5,12 @@ python main.py -botname=name1"
 
 
 import os
+from argparse import ArgumentParser
 from pathlib import Path
 from typing import Tuple
-
+from src.descriptor.descriptor import Descriptor
 from src.uploader.dynamo_uploader import DynamoDB
 from src.uploader.s3_uploader import S3uploader
-# from src.uploader.dynamo_uploader import DynamoDB
-from argparse import ArgumentParser
-from src.descriptor.descriptor import Descriptor
 
 
 def args_parse(parser: ArgumentParser) -> Tuple[str | None, str | None]:
@@ -22,6 +20,7 @@ def args_parse(parser: ArgumentParser) -> Tuple[str | None, str | None]:
     the_type = parser.parse_args().type
     bot_name = parser.parse_args().botname
     return the_type, bot_name
+
 
 def main():
     """Main flow"""
