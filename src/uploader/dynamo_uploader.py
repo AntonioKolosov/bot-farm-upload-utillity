@@ -5,6 +5,7 @@ from pathlib import Path
 from src.descriptor.descriptor import Descriptor
 from src.uploader.uploader import AWS
 from src.logger.logger import tb_log
+from src.uploader.topic import Topic
 
 
 class DynamoDB(AWS):
@@ -26,47 +27,42 @@ class DynamoDB(AWS):
             self.__descr.md_folder,
         )
 
-    def put_item(self, table_name: str, data: dict) -> None:
-        self.client.put_item(
+    def get(self, table_name: str, hash_key: any, sort_key: any) -> Topic:
+        data = self.client.get_item(
             TableName=table_name,
-            Item=data
+            Key={
+                "bot_name": hash_key,
+                "topic_name": sort_key
+            }
+        )
+        formatted_data = Topic.convert_received_data(data)
+        topic = Topic(**formatted_data)
+        return topic
+
+    def delete_item(self, table_name: str, hash_key: any, sort_key: any) -> None:
+        self.client.delete_item(
+            TableName=table_name,
+            Key={
+                "bot_name": {
+                    "S": hash_key
+                },
+                "topic_name": {
+                    "S": sort_key
+                }
+            }
         )
 
-    @staticmethod
-    def __convert_list(data: list[any]) -> list[dict]:
-        data_res = []
-        for d in data:
-            if isinstance(d, int):
-                data_res.append({"N": str(d)})
-            elif isinstance(d, str):
-                data_res.append({"S": str(d)})
-            elif isinstance(d, set):
-                data_res.append({"SS": list(d)})
-            elif isinstance(d, bytes):
-                data_res.append({"B": bytes(d)})
-            elif isinstance(d, dict):
-                data_res.append({"M": DynamoDB.__convert_data(d)})
-            elif isinstance(d, list):
-                data_res.append({"L": DynamoDB.__convert_list(d)})
-        return data_res
+    def get_all_items(self, table_name: str) -> list[Topic]:
+        response = self.client.scan(TableName=table_name)  # ожидается, что response["Item"] - топики в
+        formatted_response = [Topic.convert_received_data(i) for i in response["Items"]]
+        topics = [Topic(**i) for i in formatted_response]  # формате списка из словарей.
+        return topics
 
-    @staticmethod
-    def __convert_data(data: dict[any]) -> dict[any]:
-        result = {}
-        for k, v in data.items():
-            if isinstance(v, int):
-                result[k] = {"N": str(v)}
-            elif isinstance(v, str):
-                result[k] = {"S": v}
-            elif isinstance(v, set):
-                result[k] = {"SS": list(v)}
-            elif isinstance(v, bytes):
-                result[k] = {"B": bytes(v)}
-            elif isinstance(v, dict):
-                result[k] = {"M": DynamoDB.__convert_data(v)}
-            elif isinstance(v, list):
-                result[k] = {"L": DynamoDB.__convert_list(v)}
-        return result
+    def save(self, table_name: str, topic: Topic) -> None:
+        self.client.put_item(
+            TableName=table_name,
+            Item=topic.get_dict()
+        )
 
     def get_bot_metadata(self, bot_name: str) -> None:
         """
@@ -106,17 +102,12 @@ class DynamoDB(AWS):
         if topics:
             for file in topics:
                 if file.endswith(".json"):
-                    # print(self.__md_path, file)
-                    # разобраться с Path.joinpath
-                    # path_to_file = Path.joinpath(self.__md_path, file)
-                    path_to_file = f"{self.__md_path}/{file}"
-                    with open(path_to_file,
-                              encoding="UTF-8", mode="r") as the_file:
-                        data = json.load(the_file)
-                        data["bot_name"] = bot_name
-                        data["topic_name"] = file.replace(".json", "")
-                        data = self.__convert_data(data)
-                        self.put_item("datatopics", data)
+                    path_to_file = Path.joinpath(
+                        Path(self.__md_path), file
+                    )
+                    topic_name = file.replace(".json", "")
+                    topic = Topic.from_file(self.client, path_to_file, bot_name, topic_name)
+                    self.save("datatopics", topic)
         else:
             print(f"Топики в {bot_name} не найдены")
             tb_log.log_info(f"Топики в {bot_name} не найдены")
@@ -126,6 +117,7 @@ class DynamoDB(AWS):
         Check if a DynamoDB table exists.
         """
         tables_list = self.client.list_tables()
+        print(tables_list["TableNames"])
         return table_name in tables_list["TableNames"]
 
     def __check_table_status(self, table_name: str) -> str:
